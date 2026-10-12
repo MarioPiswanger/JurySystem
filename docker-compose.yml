@@ -9,6 +9,7 @@ include:
   - docker-compose-python-app.yml  # service app declared | depends on: db
   - docker-compose-jury-app.yml  # service jury declared | depends on: db
   - docker-compose-fastapi-sqlmodel.yml  # service api-fastapi-sqlmodel declared | depends on: db
+  - docker-compose-bib-ocr.yml  # service bib-ocr declared | start number recognition (YOLO + PaddleOCR)
 
 
   #- docker-compose-php-nginx.yml  # service php-nginx declared

@@ -1,0 +1,9 @@
+fastapi==0.115.*
+uvicorn[standard]==0.34.*
+python-multipart==0.0.20
+numpy<2.3
+opencv-python-headless==4.11.*
+ultralytics==8.3.*
+# 3.3 crashes on CPU with oneDNN (ConvertPirAttribute2RuntimeAttribute)
+paddlepaddle==3.2.*
+paddleocr==3.7.*

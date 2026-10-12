@@ -1,0 +1,30 @@
+services:
+  bib-ocr:
+    extends:
+      file: docker-compose-python_template.yml
+      service: python
+    build:
+      context: backend/bib-ocr
+    container_name: bib-ocr
+    restart: always
+    environment:
+      - PORT_BIB_OCR=${PORT_BIB_OCR}
+      - MAX_DIGITS=4
+    # ports:
+    #  - "${PORT_BIB_OCR}:${PORT_BIB_OCR}"
+    volumes:
+      - ./backend/bib-ocr/src:/usr/src/app/src:volume-nocopy
+      # put a trained bib detector here as bib.pt, otherwise person detection is used
+      - ./backend/bib-ocr/models:/usr/src/app/models/custom:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bib-ocr.rule=Host(`${SUBDOMAIN_BIB_OCR}${DOMAIN}`)"
+      - "traefik.http.routers.bib-ocr.entrypoints=websecure"
+      - "traefik.http.services.bib-ocr.loadbalancer.server.port=${PORT_BIB_OCR}"
+      - "traefik.http.routers.bib-ocr.tls.certresolver=letsencrypt"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cd /usr/src/app/src
+        uvicorn main:api --workers 1 --host "0.0.0.0" --port ${PORT_BIB_OCR} --proxy-headers
