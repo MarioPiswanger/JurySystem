@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Startnummern-Erkennung</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #1d2330; --muted: #667085;
+    --border: #d0d5dd; --accent: #16a34a; --accent-soft: #dcfce7; --error: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c; --card: #1b202a; --text: #e6e8ee; --muted: #98a2b3;
+      --border: #344054; --accent: #22c55e; --accent-soft: #14321f; --error: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  .sub { margin: 0 0 24px; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  #drop {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    min-height: 160px; border: 2px dashed var(--border); border-radius: 10px; cursor: pointer;
+    text-align: center; padding: 16px; transition: border-color .15s, background .15s;
+  }
+  #drop.over, #drop:hover { border-color: var(--accent); background: var(--accent-soft); }
+  #drop strong { font-size: 1.05rem; }
+  #drop span { color: var(--muted); font-size: .9rem; }
+  input[type=file] { display: none; }
+  #status { margin: 16px 0 0; min-height: 1.5em; color: var(--muted); }
+  #status.error { color: var(--error); }
+  #result { display: none; margin-top: 20px; }
+  .numbers { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .bib {
+    background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px;
+    padding: 8px 14px; min-width: 110px;
+  }
+  .bib b { display: block; font-size: 1.8rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .bib small { color: var(--muted); }
+  canvas { display: block; max-width: 100%; height: auto; border-radius: 8px; }
+  footer { margin-top: 20px; font-size: .85rem; color: var(--muted); }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Startnummern-Erkennung</h1>
+  <p class="sub">Foto eines Läufers hochladen – die Startnummer wird automatisch erkannt.</p>
+
+  <div class="card">
+    <label id="drop" for="file">
+      <strong>Foto auswählen oder hierher ziehen</strong>
+      <span>JPEG oder PNG, max. 15 MB</span>
+    </label>
+    <input id="file" type="file" accept="image/*">
+    <p id="status">Dienst wird geprüft …</p>
+
+    <div id="result">
+      <div class="numbers" id="numbers"></div>
+      <canvas id="canvas"></canvas>
+    </div>
+  </div>
+
+  <footer>Schnittstelle für Entwickler: <a href="docs">API-Dokumentation</a></footer>
+</main>
+
+<script>
+  const fileInput = document.getElementById('file');
+  const drop = document.getElementById('drop');
+  const statusEl = document.getElementById('status');
+  const resultEl = document.getElementById('result');
+  const numbersEl = document.getElementById('numbers');
+  const canvas = document.getElementById('canvas');
+
+  const MODES = { bib: 'eigenes Startnummern-Modell', person: 'Personenerkennung', loading: 'wird geladen' };
+
+  function setStatus(text, isError = false) {
+    statusEl.textContent = text;
+    statusEl.classList.toggle('error', isError);
+  }
+
+  fetch('health').then(r => r.json())
+    .then(h => setStatus(`Bereit – Modus: ${MODES[h.mode] || h.mode}`))
+    .catch(() => setStatus('Dienst nicht erreichbar.', true));
+
+  fileInput.addEventListener('change', () => fileInput.files[0] && recognize(fileInput.files[0]));
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    if (e.dataTransfer.files[0]) recognize(e.dataTransfer.files[0]);
+  });
+
+  async function recognize(file) {
+    resultEl.style.display = 'none';
+    setStatus('Erkennung läuft …');
+    const form = new FormData();
+    form.append('image', file);
+    try {
+      const response = await fetch('detect', { method: 'POST', body: form });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Fehler bei der Erkennung');
+      await show(file, data);
+    } catch (err) {
+      setStatus(err.message || 'Fehler bei der Erkennung', true);
+    }
+  }
+
+  async function show(file, data) {
+    const img = await createImageBitmap(file);
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const line = Math.max(3, img.width / 200);
+    const font = Math.max(18, img.width / 30);
+    ctx.lineWidth = line;
+    ctx.font = `bold ${font}px system-ui, sans-serif`;
+    for (const n of data.numbers) {
+      const [x1, y1, x2, y2] = n.box;
+      ctx.strokeStyle = '#16a34a';
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      const label = n.number;
+      const w = ctx.measureText(label).width + 12;
+      const top = Math.max(0, y1 - font - 8);
+      ctx.fillStyle = '#16a34a';
+      ctx.fillRect(x1, top, w, font + 8);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, x1 + 6, top + font);
+    }
+
+    numbersEl.innerHTML = '';
+    for (const n of data.numbers) {
+      const el = document.createElement('div');
+      el.className = 'bib';
+      el.innerHTML = `<b></b><small>Sicherheit ${Math.round(n.confidence * 100)} %</small>`;
+      el.querySelector('b').textContent = n.number;
+      numbersEl.appendChild(el);
+    }
+    const count = data.numbers.length;
+    setStatus(count
+      ? `${count === 1 ? '1 Startnummer' : count + ' Startnummern'} erkannt in ${data.timeMs} ms`
+      : 'Keine Startnummer erkannt.', count === 0);
+    resultEl.style.display = 'block';
+  }
+</script>
+</body>
+</html>

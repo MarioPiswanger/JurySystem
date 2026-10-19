@@ -13,6 +13,7 @@ FastAPI-Dienst, der Startnummern auf Fotos erkennt.
 
 | Methode | Pfad                 | Beschreibung                                           |
 | ------- | -------------------- | ------------------------------------------------------ |
+| GET     | `/`                  | Upload-Seite zum Ausprobieren (deutsch)                |
 | GET     | `/health`            | Status und Modus (`bib` / `person`)                    |
 | POST    | `/detect`            | Multipart-Feld `image` → JSON mit erkannten Nummern    |
 | POST    | `/detect/annotated`  | wie oben, liefert JPEG mit Boxen, Nummern im Header `X-Bib-Numbers` |
@@ -35,6 +36,17 @@ curl -F "image=@foto.jpg" https://bib.localhost/detect
 | `DET_CONF`      | `0.35`                               |
 | `OCR_MIN_SCORE` | `0.5`                                |
 | `MIN_DIGITS` / `MAX_DIGITS` | `1` / `4`                |
+
+## Tests
+
+```shell
+python -m pytest tests/bib_ocr_test.py -v
+```
+
+- Die Regeln zur Auswahl der Nummer (`src/bibrules.py`) werden ohne YOLO/Paddle getestet.
+- Läuft der Dienst (`BIB_OCR_URL`, Default `https://bib.localhost`), wird jedes Foto in
+  `tests/data/bib/` an `/detect` geschickt. Der Dateiname ist die erwartete Nummer,
+  z. B. `1587.png` oder `1587_lagos.jpg`. Neue Testfotos einfach dort ablegen.
 
 ## Eigenes Bib-Modell trainieren
 

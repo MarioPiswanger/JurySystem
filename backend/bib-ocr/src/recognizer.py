@@ -1,6 +1,5 @@
 """Start number (bib) recognition: YOLO finds the bib, PaddleOCR reads the digits."""
 import os
-import re
 import threading
 from dataclasses import dataclass, asdict
 
@@ -8,6 +7,8 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 from paddleocr import PaddleOCR
+
+from bibrules import pickNumber, torsoRange
 
 # custom bib model (single class "bib"); if missing we fall back to person detection
 BIB_MODEL = os.getenv('BIB_MODEL', '/usr/src/app/models/custom/bib.pt')
@@ -90,8 +91,7 @@ class BibRecognizer:
             x1, y1, x2, y2 = x1 - padX, y1 - padY, x2 + padX, y2 + padY
         elif (y2 - y1) > 0:
             # bibs are worn on the torso: skip head and legs
-            height = y2 - y1
-            y1, y2 = y1 + int(height * 0.15), y1 + int(height * 0.70)
+            y1, y2 = torsoRange(y1, y2, h)
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w, x2), min(h, y2)
         crop = image[y1:y2, x1:x2]
@@ -104,16 +104,7 @@ class BibRecognizer:
     def readNumber(self, crop: np.ndarray) -> tuple[str, float, list[str]] | None:
         res = self.ocr.predict(crop)[0]
         texts, scores, polys = res['rec_texts'], res['rec_scores'], res['rec_polys']
-        best, bestRank = None, 0.0
-        for text, score, poly in zip(texts, scores, polys):
-            digits = re.sub(r'\D', '', text)
-            if not (MIN_DIGITS <= len(digits) <= MAX_DIGITS) or score < OCR_MIN_SCORE:
-                continue
-            # the start number is usually the biggest text on the bib
-            height = float(np.ptp(np.asarray(poly)[:, 1]))
-            rank = score * height
-            if rank > bestRank:
-                best, bestRank = (digits, float(score)), rank
+        best = pickNumber(texts, scores, polys, MIN_DIGITS, MAX_DIGITS, OCR_MIN_SCORE)
         if best is None:
             return None
         return best[0], best[1], list(texts)
