@@ -51,6 +51,20 @@ It will create a new folder: Dockerized-Web-Framework-for-IoT
 
 ### 👉 NGINX-PHP (HTML and PHP Webserver)
 https://web.localhost/index.php
+
+## Öffentliche Event-Anmeldung und Bilder
+Die öffentliche Startseite der Jury-App zeigt unter „Anmeldung zu Events“ alle
+zukünftigen und laufenden Events nach Datum sortiert. Für eine Anmeldung wählt
+der Teilnehmer ein Event, erstellt ein Konto mit Teilnehmerdaten und wird
+automatisch einer passenden Wettkampfklasse zugeordnet. Der Login ist separat
+unter `/login` erreichbar.
+
+Unter „Bilder“ wählen Besucher ein Event und geben eine Startnummer ein, um
+passende Fotos anzusehen. Hosts und Administratoren können dort JPEG- und
+PNG-Bilder einem Event zuordnen und hochladen; die Startnummern werden vom
+`bib-ocr`-Dienst erkannt.
+Die Bilddateien und Zuordnungen liegen im persistenten Docker-Volume
+`api-image-uploads`.
 ## *Database*
 ### 👉 MariaDB + Phpmyadmin 
 https://phpmyadmin.localhost

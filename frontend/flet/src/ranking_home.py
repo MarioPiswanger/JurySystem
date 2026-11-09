@@ -4,7 +4,7 @@ import flet as ft
 from view import View
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
-from shared.database import Progress, Restrictions
+from shared.database import Progress
 
 class RankingHomeView(View):
     def __init__(self, page: ft.Page, db, redis):
@@ -16,7 +16,7 @@ class RankingHomeView(View):
             ft.Text("Events", size=40, weight="bold"),
         ]
         user = self.page.session.get("user")
-        is_host = user is not None and user.restrictions == Restrictions.HOST
+        is_host = user is not None and user.isHost()
 
         for e in self.db.getAllEvents():
             progress = e.progress()

@@ -15,6 +15,7 @@ from categories import CategoriesView
 from disciplines import DisciplinesView
 from event_judges import EventJudgesView
 from ranking_home import RankingHomeView
+from public import ImagesView, PublicSignupView
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from shared.database import JuryDatabase, Event, Progress
@@ -39,7 +40,8 @@ class Navigator:
 
     def setToken(self, token: str):
         self.page.session.set('token', token)
-        self.redis.setex(token, 3600, 1)
+        user = self.page.session.get('user')
+        self.redis.setex(token, 3600, str(user.id))
 
     def route_change(self, route):
         print(f'{route=}')
@@ -82,6 +84,13 @@ class Navigator:
             return
         elif self.page.route == '/login':
             self.page.views.append(LoginView(self.page, self.db, self.redis))
+        elif self.page.route == '/':
+            self.page.views.append(HomeView(self.page, self.db, self.redis))
+        elif self.page.route == '/bilder':
+            self.page.views.append(ImagesView(self.page, self.db, self.redis))
+        elif self.page.route.startswith('/anmeldung/'):
+            eventId = int(self.page.route.split('/')[-1])
+            self.page.views.append(PublicSignupView(self.page, self.db, self.redis, eventId))
         elif self.page.route.startswith('/autoLogin'):
             user = self.page.route.split('/')[2]
             token = self.page.route.split('/')[3]

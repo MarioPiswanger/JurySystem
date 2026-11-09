@@ -29,7 +29,8 @@ class View(ft.View):
 
     def setToken(self, token: str):
         self.page.session.set('token', token)
-        self.redis.setex(token, 3600, 1)
+        user = self.page.session.get('user')
+        self.redis.setex(token, 3600, str(user.id))
 
     @staticmethod
     def host() -> str:

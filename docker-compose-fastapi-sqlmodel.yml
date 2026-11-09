@@ -11,11 +11,13 @@ services:
       - DOMAIN=${DOMAIN}
       - SUBDOMAIN_API=${SUBDOMAIN_API}
       - SUBDOMAIN_JURY=${SUBDOMAIN_JURY}
+      - BIB_OCR_URL=http://bib-ocr:${PORT_BIB_OCR}
     # ports:
     #  - "${PORT_API}:${PORT_API}"
     volumes:
       - ./backend/api-fastapi-sqlmodel/log:/usr/src/app/log
       - ./backend/api-fastapi-sqlmodel/src:/usr/src/app/src:volume-nocopy
+      - api-image-uploads:/usr/src/app/uploads
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api-fastapi-sqlmodel.rule=Host(`${SUBDOMAIN_API}${DOMAIN}`)"
@@ -31,3 +33,4 @@ services:
     depends_on:
       - db
       - redis
+      - bib-ocr

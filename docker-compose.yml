@@ -16,7 +16,8 @@ include:
 networks:
   backnet:
     name: back-network
-
+volumes:
+  api-image-uploads:
 
 
 

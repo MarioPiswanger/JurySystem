@@ -18,65 +18,258 @@ class HomeView(View):
         super().__init__(page, db, redis)
         self.route = '/'
         user = page.session.get('user')
-
-        username = '' if user is None else user.username
-        controls = []
-        for allowed in allowedRoutes(user):
-            route = allowed.route
-            controls.append(TextButton(self.tr.tr(allowed.name), on_click=lambda _,r=route: self.page.go(r)))
-
-        menu = ft.Column(
-            controls=controls,
-            alignment=ft.MainAxisAlignment.CENTER,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=5
+        events = sorted(
+            self.db.getAllEvents(),
+            key=lambda event: (event.date, event.name.casefold()),
         )
-        logout_button = ft.Row(
-            controls=[
-                ft.ElevatedButton(
-                    "Logout",
-                    on_click=self.logout,
-                    color="black",
-                    width= 100,
-                    height= 40,
-                    style=ft.ButtonStyle(
-                        bgcolor = {
-                            ft.ControlState.DEFAULT: "lightblue",
-                            ft.ControlState.HOVERED: "#FFFFFFFF",
-                        },
-                        text_style=ft.TextStyle(size=16),
+        event_picker = ft.Dropdown(
+            label="Event auswählen",
+            options=[
+                ft.dropdown.Option(key=str(event.id), text=event.descr())
+                for event in events
+            ],
+            value=str(events[0].id) if events else None,
+            disabled=not events,
+        )
+        event_details = ft.Column(spacing=10)
+
+        def show_selected_event(_, update_page=True):
+            event = next(
+                (
+                    item for item in events
+                    if str(item.id) == event_picker.value
+                ),
+                None,
+            )
+            event_details.controls.clear()
+            if event is None:
+                event_details.controls.append(
+                    ft.Text("Zurzeit sind keine Events verfügbar.")
+                )
+            else:
+                progress = event.progress()
+                status = {
+                    Progress.PLANNED: "Anmeldung offen",
+                    Progress.ACTIVE: "Event läuft",
+                    Progress.FINISHED: "Abgeschlossen",
+                }[progress]
+                event_details.controls.extend(
+                    [
+                        ft.Text(event.name, size=20, weight=ft.FontWeight.BOLD),
+                        ft.Text(f"Datum: {event.dateFormated()}"),
+                        ft.Text(status),
+                    ]
+                )
+                if progress == Progress.PLANNED:
+                    event_details.controls.append(
+                        ft.ElevatedButton(
+                            "Für dieses Event anmelden",
+                            icon=ft.Icons.PERSON_ADD_ALT_1,
+                            on_click=lambda _, event_id=event.id: self.page.go(
+                                f"/anmeldung/{event_id}"
+                            ),
+                        )
                     )
+                elif progress == Progress.ACTIVE:
+                    event_details.controls.append(
+                        ft.ElevatedButton(
+                            "Live-Ergebnisse ansehen",
+                            icon=ft.Icons.LIVE_TV,
+                            on_click=lambda _, event_id=event.id: self.page.go(
+                                f"/public/liveEvent/{event_id}"
+                            ),
+                        )
+                    )
+                else:
+                    event_details.controls.extend(
+                        [
+                            ft.ElevatedButton(
+                                "Ergebnisse (PDF)",
+                                on_click=lambda _, event_id=event.id: self.page.launch_url(
+                                    f"https://{View.api()}/results/{event_id}"
+                                ),
+                            ),
+                            ft.ElevatedButton(
+                                "Ergebnisse (XLSX)",
+                                on_click=lambda _, event_id=event.id: self.page.launch_url(
+                                    f"https://{View.api()}/results_xlsx/{event_id}"
+                                ),
+                            ),
+                        ]
+                    )
+            if update_page:
+                self.page.update()
+
+        event_picker.on_change = show_selected_event
+        show_selected_event(None, update_page=False)
+
+        def loginbtn(_):
+            user_id = self.db.validateUser(
+                (userEdit.value or "").strip(),
+                passEdit.value or "",
+            )
+            if user_id is None:
+                self.page.open(
+                    ft.SnackBar(
+                        ft.Text("Falscher Benutzername oder falsches Passwort."),
+                        bgcolor="red",
+                    )
+                )
+                return
+
+            self.page.session.set("user", self.db.getUser(user_id))
+            self.setToken(secrets.token_urlsafe())
+            if self.page.session.contains_key("target"):
+                target = self.page.session.get("target")
+                self.page.session.remove("target")
+                self.page.go(target)
+            else:
+                self.page.go("/")
+
+        userEdit = ft.TextField(label="Benutzername", width=320)
+        passEdit = ft.TextField(
+            label="Passwort",
+            password=True,
+            can_reveal_password=True,
+            width=320,
+            on_submit=loginbtn,
+        )
+
+        left_panel = ft.Column(
+            controls=[
+                ft.Column(
+                    controls=[
+                        ft.Icon(ft.Icons.EMOJI_EVENTS, size=44, color=ft.Colors.BLUE_300),
+                        ft.Text("Jury System", size=24, weight=ft.FontWeight.BOLD),
+                        ft.Text("Wettkämpfe und Ergebnisse auf einen Blick."),
+                    ],
+                    spacing=10,
+                ),
+                ft.Container(expand=True),
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Icon(ft.Icons.PHOTO_LIBRARY_OUTLINED, size=34),
+                            ft.Text("Bilder finden", size=20, weight=ft.FontWeight.BOLD),
+                            ft.Text(
+                                "Suche Wettkampffotos über deine Startnummer."
+                            ),
+                            ft.ElevatedButton(
+                                "Zum Bilderbereich",
+                                icon=ft.Icons.ARROW_FORWARD,
+                                on_click=lambda _: self.page.go("/bilder"),
+                            ),
+                        ],
+                        spacing=10,
+                    ),
+                    padding=18,
+                    border=ft.border.all(1, ft.Colors.OUTLINE),
+                    border_radius=12,
                 ),
             ],
+            spacing=20,
+            expand=True,
         )
 
-        help_button = ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: self.page.go('/help'))
+        if user is None:
+            center_panel = ft.Column(
+                controls=[
+                    ft.Icon(ft.Icons.ACCOUNT_CIRCLE_OUTLINED, size=48),
+                    ft.Text("Willkommen zurück", size=26, weight=ft.FontWeight.BOLD),
+                    ft.Text("Melde dich beim Jurysystem an."),
+                    userEdit,
+                    passEdit,
+                    ft.ElevatedButton(
+                        "Login",
+                        icon=ft.Icons.LOGIN,
+                        width=320,
+                        on_click=loginbtn,
+                    ),
+                    ft.Text("Noch kein Konto? Wähle rechts ein Event zur Anmeldung."),
+                ],
+                spacing=14,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        else:
+            center_panel = ft.Column(
+                controls=[
+                    ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=48),
+                    ft.Text("Angemeldet", size=26, weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Hallo, {user.username}"),
+                    ft.ElevatedButton("Logout", on_click=self.logout),
+                    ft.Divider(),
+                    ft.Text("Verwaltung", size=20, weight=ft.FontWeight.BOLD),
+                    ft.Row(
+                        controls=[
+                            TextButton(
+                                self.tr.tr(allowed.name),
+                                on_click=lambda _, route=allowed.route: self.page.go(route),
+                            )
+                            for allowed in allowedRoutes(user)
+                        ],
+                        wrap=True,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                ],
+                spacing=14,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            )
 
+        right_panel = ft.Column(
+            controls=[
+                ft.Icon(ft.Icons.EVENT_AVAILABLE, size=40, color=ft.Colors.BLUE_300),
+                ft.Text("Events", size=26, weight=ft.FontWeight.BOLD),
+                ft.Text("Wähle eine Veranstaltung aus."),
+                event_picker,
+                event_details,
+            ],
+            spacing=14,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+        )
+        card_style = {
+            "padding": 24,
+            "border": ft.border.all(1, ft.Colors.OUTLINE),
+            "border_radius": 16,
+            "bgcolor": ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        }
         self.controls = [
             ft.AppBar(
-                title=ft.Row(
-                    [
-                        help_button,
-                        ft.Text("Jury System", size=18, weight="bold"),
-                        ft.Container(expand=True),
-                        ft.Text(f"user: {username}", size=14, italic=True),
-                        logout_button,
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
+                title=ft.Text("Jury System"),
                 bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             ),
             ft.Container(
-                content=menu,
+                content=ft.ResponsiveRow(
+                    controls=[
+                        ft.Container(
+                            content=left_panel,
+                            col={"xs": 12, "md": 4},
+                            **card_style,
+                        ),
+                        ft.Container(
+                            content=center_panel,
+                            col={"xs": 12, "md": 4},
+                            alignment=ft.alignment.center,
+                            **card_style,
+                        ),
+                        ft.Container(
+                            content=right_panel,
+                            col={"xs": 12, "md": 4},
+                            **card_style,
+                        ),
+                    ],
+                    spacing=18,
+                    run_spacing=18,
+                    vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+                    expand=True,
+                ),
                 expand=True,
-                alignment=ft.alignment.center
-            )
+                padding=24,
+            ),
         ]
 
     def logout(self, e):
         self.page.session.clear()
-        self.page.go('/login')
+        self.page.go('/')
 
 
 class LoginView(View):
@@ -127,18 +320,6 @@ class LoginView(View):
             ft.Text("Anmeldung zum Jurysystem",size = 40, weight="bold"),
             userEdit, passEdit,login_button
         ]
-
-        for e in self.db.getAllEvents():
-            if e.progress() == Progress.FINISHED:
-                controls.append(ft.Row(
-                    controls=[
-                        ft.ElevatedButton(f"{e.descr()} PDF", on_click=lambda _,id=e.id: self.page.launch_url(f'https://{View.api()}/results/{id}')),
-                        ft.ElevatedButton("XLSX", on_click=lambda _,id=e.id: self.page.launch_url(f'https://{View.api()}/results_xlsx/{id}')),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ))
-            if e.progress() == Progress.ACTIVE:
-                controls.append(ft.ElevatedButton(f"{e.descr()}", on_click=lambda _,id=e.id: self.page.go(f"/public/liveEvent/{id}")))
 
         self.controls = [
             ft.Container(

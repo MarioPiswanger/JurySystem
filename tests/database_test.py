@@ -154,6 +154,13 @@ class TestDatabase(unittest.TestCase):
         host = self.db.getUser(2)
         allowed = allowedRoutes(host)
         self.assertEqual(len(allowed), 4)
+
+        admin = self.db.getUser(1)
+        self.assertTrue(admin.isHost())
+        self.assertEqual(
+            {route.route for route in allowedRoutes(admin)},
+            {"/users", "/athletes", "/attendances", "/events", "/rating", "/ranking"},
+        )
         
     def test_rank(self):
         ratingSums = [20.0000000001, 25.0, 20.0, 20.0, 30.0, 15.0, 10.0, 15.0]

@@ -59,7 +59,7 @@ class User:
         return datetime.now() < self.expires and not self.locked
     
     def isHost(self) ->bool:
-        return self.restrictions == Restrictions.HOST
+        return self.restrictions in (Restrictions.HOST, Restrictions.ADMIN)
     
     @staticmethod
     def fromRow(row):
@@ -121,9 +121,11 @@ class Event:
     def progress(self, day: date | None = None) -> Progress:
         if day is None:
             day = date.today()
+        if self.__finished:
+            return Progress.FINISHED
         if day < self.date.date():
             return Progress.PLANNED
-        return Progress.FINISHED if self.__finished else Progress.ACTIVE
+        return Progress.ACTIVE
 
 @dataclass
 class EventCategory:
@@ -308,6 +310,79 @@ class JuryDatabase:
             self.conn.commit()
             return cursor.lastrowid
         return None
+
+    def createPublicRegistration(
+        self,
+        username: str,
+        password: str,
+        email: str,
+        team: str,
+        givenname: str,
+        surname: str,
+        birth: datetime,
+        gender: Gender,
+        eventId: int,
+        categoryName: str,
+    ) -> int:
+        passwordHash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        self.conn.begin()
+        with self.conn.cursor() as cursor:
+            try:
+                cursor.execute(
+                    "SELECT `date`, `finished`, `deleted` FROM `events` "
+                    "WHERE `id` = %s FOR UPDATE",
+                    (eventId,),
+                )
+                event = cursor.fetchone()
+                if (
+                    event is None
+                    or event["deleted"]
+                    or event["finished"]
+                    or date.today() >= event["date"].date()
+                ):
+                    raise ValueError("Event-Anmeldung ist nicht mehr möglich.")
+                cursor.execute(
+                    """SELECT COUNT(*) AS `count` FROM `event_categories`
+                    WHERE `eventId` = %s AND `name` = %s AND `gender` = %s
+                    AND `birthFrom` <= %s AND `birthTo` >= %s""",
+                    (eventId, categoryName, gender.value, birth, birth),
+                )
+                if cursor.fetchone()["count"] != 1:
+                    raise ValueError("Die Wettkampfklasse passt nicht zu den Teilnehmerdaten.")
+                cursor.execute(
+                    """INSERT INTO `users`
+                    (`username`, `hash`, `email`, `team`, `registered`, `expires`,
+                     `restrictions`, `locked`, `token`, `language`)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 0, '', 'ge')""",
+                    (
+                        username,
+                        passwordHash,
+                        email,
+                        team,
+                        datetime.now(),
+                        datetime.now() + timedelta(weeks=300),
+                        Restrictions.TRAINER.value,
+                    ),
+                )
+                userId = cursor.lastrowid
+                cursor.execute(
+                    """INSERT INTO `athletes`
+                    (`givenname`, `surname`, `userId`, `birth`, `gender`)
+                    VALUES (%s, %s, %s, %s, %s)""",
+                    (givenname, surname, userId, birth, gender.value),
+                )
+                athleteId = cursor.lastrowid
+                cursor.execute(
+                    """INSERT INTO `attendances`
+                    (`athleteId`, `eventId`, `eventCategoryName`, `group`)
+                    VALUES (%s, %s, %s, '')""",
+                    (athleteId, eventId, categoryName),
+                )
+                self.conn.commit()
+                return userId
+            except (pymysql.MySQLError, ValueError):
+                self.conn.rollback()
+                raise
     
     def removeUser(self, userId: int) -> bool:
         with self.conn.cursor() as cursor:
@@ -468,7 +543,7 @@ class JuryDatabase:
     def getAllEvents(self) -> List[Event]:
         events = []
         with self.conn.cursor() as cursor:
-            cursor.execute(f'SELECT * FROM events;')
+            cursor.execute('SELECT * FROM events WHERE `deleted` = 0 ORDER BY `date`, `name`;')
             for row in cursor.fetchall():
                 events.append(Event.fromRow(row))
         return events

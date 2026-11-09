@@ -2,13 +2,19 @@ import io
 import os
 import sys
 import base64
-from fastapi import FastAPI, Response, Request, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+import json
+import re
+import uuid
+from pathlib import Path
+from fastapi import FastAPI, Response, Request, HTTPException, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
 from datetime import datetime
+import httpx
 import qrcode
 from openpyxl import Workbook
 from io import BytesIO
@@ -20,9 +26,25 @@ from shared.database import JuryDatabase, Athlete
 r = StrictRedis(host='redis', port=6379, db=0, password='redispass', decode_responses=True)
 
 api = FastAPI()
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        f"https://{os.environ.get('SUBDOMAIN_JURY', '')}{os.environ.get('DOMAIN', '')}"
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 api.mount("/static", StaticFiles(directory="static"), name="static")
 env = Environment(loader=FileSystemLoader('templates'))
+UPLOAD_DIR = Path(os.environ.get(
+    "UPLOAD_DIR",
+    os.path.join(os.path.dirname(__file__), "..", "uploads"),
+))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+IMAGE_INDEX = UPLOAD_DIR / "index.json"
+MAX_IMAGE_BYTES = 15 * 1024 * 1024
+OCR_URL = os.environ.get("BIB_OCR_URL", "http://bib-ocr:8000")
 
 def createResponse(template: str, context: dict, filename: str) -> Response:
     template = env.get_template('table.html')
@@ -60,8 +82,11 @@ def alphaNum(text: str) -> str:
     return ''.join(x for x in text if x.isalnum())
 
 
-def validateToken(token: str) -> None:
-    if r.get(token) is None:
+def validateToken(token: str, userId: int | None = None) -> None:
+    tokenUserId = r.get(token)
+    if tokenUserId is None or (
+        userId is not None and tokenUserId != str(userId)
+    ):
         raise HTTPException(
             status_code=401,
             detail="unautohrized"
@@ -108,6 +133,110 @@ def buildAttendancesTables(db: JuryDatabase, userId: int, eventId: int):
 @api.get("/test")
 async def test():
     return {"message": f"API running {datetime.now()}"}
+
+
+@api.post("/images/upload/{eventId}/{userId}/{token}")
+async def uploadImage(
+    eventId: int,
+    userId: int,
+    token: str,
+    image: UploadFile = File(...),
+):
+    validateToken(token, userId)
+    db = JuryDatabase("db")
+    user = db.getUser(userId)
+    if user is None or not user.isHost():
+        raise HTTPException(status_code=403, detail="Nur Hosts dürfen Bilder hochladen.")
+    if not any(event.id == eventId for event in db.getAllEvents()):
+        raise HTTPException(status_code=404, detail="Event nicht gefunden.")
+
+    suffix = Path(image.filename or "").suffix.lower()
+    if suffix not in {".jpg", ".jpeg", ".png"} or image.content_type not in {
+        "image/jpeg",
+        "image/png",
+    }:
+        raise HTTPException(status_code=415, detail="Nur JPEG- und PNG-Bilder sind erlaubt.")
+
+    imageBytes = await image.read(MAX_IMAGE_BYTES + 1)
+    if len(imageBytes) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Bild ist zu groß (max. 15 MB).")
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            ocrResponse = await client.post(
+                f"{OCR_URL.rstrip('/')}/detect",
+                files={"image": (image.filename, imageBytes, image.content_type)},
+            )
+            ocrResponse.raise_for_status()
+            detected = ocrResponse.json()
+    except httpx.RequestError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Der Startnummern-Erkennungsdienst ist nicht erreichbar.",
+        ) from error
+    except httpx.HTTPStatusError as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Der Startnummern-Erkennungsdienst konnte das Bild nicht auswerten.",
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Der Startnummern-Erkennungsdienst hat eine ungültige Antwort geliefert.",
+        ) from error
+
+    try:
+        numbers = sorted(
+            {
+                str(item["number"])
+                for item in detected["numbers"]
+                if re.fullmatch(r"\d{1,4}", str(item["number"]))
+            }
+        )
+    except (KeyError, TypeError) as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Die Erkennungsantwort enthält keine gültigen Startnummern.",
+        ) from error
+
+    filename = f"{uuid.uuid4().hex}{'.png' if suffix == '.png' else '.jpg'}"
+    destination = UPLOAD_DIR / filename
+    destination.write_bytes(imageBytes)
+
+    records = json.loads(IMAGE_INDEX.read_text(encoding="utf-8")) if IMAGE_INDEX.exists() else []
+    records.append({"filename": filename, "eventId": eventId, "numbers": numbers})
+    temporaryIndex = IMAGE_INDEX.with_suffix(".tmp")
+    temporaryIndex.write_text(
+        json.dumps(records, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    temporaryIndex.replace(IMAGE_INDEX)
+    return {"filename": filename, "numbers": numbers}
+
+
+@api.get("/images/search/{eventId}/{number}")
+async def searchImages(eventId: int, number: str):
+    if not re.fullmatch(r"\d{1,4}", number):
+        raise HTTPException(status_code=400, detail="Ungültige Startnummer.")
+    records = json.loads(IMAGE_INDEX.read_text(encoding="utf-8")) if IMAGE_INDEX.exists() else []
+    return {
+        "images": [
+            {"filename": record["filename"], "url": f"/images/files/{record['filename']}"}
+            for record in records
+            if record.get("eventId") == eventId and number in record.get("numbers", [])
+        ]
+    }
+
+
+@api.get("/images/files/{filename}")
+async def getImage(filename: str):
+    if not re.fullmatch(r"[a-f0-9]{32}\.(jpg|png)", filename):
+        raise HTTPException(status_code=404, detail="Bild nicht gefunden.")
+    path = UPLOAD_DIR / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Bild nicht gefunden.")
+    mediaType = "image/png" if filename.endswith(".png") else "image/jpeg"
+    return FileResponse(path, media_type=mediaType)
 
 @api.get('/athletes/{token}/{userId}', response_class=HTMLResponse)
 async def athletes(userId: int, token: str):

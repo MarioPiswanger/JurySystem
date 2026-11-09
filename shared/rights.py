@@ -10,6 +10,8 @@ class Route():
     allowed: list[Restrictions]
     
     def isAllowed(self, user: User) -> bool:
+        if user.restrictions == Restrictions.ADMIN:
+            return True
         for allowed in self.allowed:
             if user.restrictions.value == allowed.value:
                 return True
