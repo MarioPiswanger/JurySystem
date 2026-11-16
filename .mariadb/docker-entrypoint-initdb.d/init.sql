@@ -108,18 +108,20 @@ CREATE TABLE IF NOT EXISTS `attendances` (
   `athleteId` int(10) unsigned NOT NULL,
   `eventId` int(10) unsigned NOT NULL,
   `eventCategoryName` varchar(50) NOT NULL,
+  `bib` int(10) unsigned DEFAULT NULL,
   `group` varchar(50) NOT NULL,
   `hidden` tinyint(4) DEFAULT 0,
   PRIMARY KEY (`athleteId`, `eventId`, `eventCategoryName`),
+  UNIQUE (`eventId`, `bib`),
   FOREIGN KEY (`eventId`) REFERENCES events(`id`),
   FOREIGN KEY (`athleteId`) REFERENCES athletes(`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-INSERT INTO `attendances` (`athleteId`, `eventId`, `eventCategoryName`, `group`, `hidden`) VALUES
-  (1, 1, 'Kn01', 'Riege1', 0),
-  (2, 1, 'Kn01', 'Riege1', 0),
-  (4, 1, 'Kn01', 'Riege2', 0),
-  (3, 1, 'Md01', 'Riege2', 0);
+INSERT INTO `attendances` (`athleteId`, `eventId`, `eventCategoryName`, `bib`, `group`, `hidden`) VALUES
+  (1, 1, 'Kn01', 1, 'Riege1', 0),
+  (2, 1, 'Kn01', 2, 'Riege1', 0),
+  (4, 1, 'Kn01', 3, 'Riege2', 0),
+  (3, 1, 'Md01', 4, 'Riege2', 0);
 
 CREATE TABLE IF NOT EXISTS `ratings` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -143,6 +145,19 @@ INSERT INTO `ratings` (`id`, `ts`, `athleteId`, `eventDisciplineName`, `eventId`
   (3, '2025-05-25', 1, 'Boden', 1, 5, 4.0, 2.0),
   (4, '2025-05-25', 2, 'Boden', 1, 5, 6.0, 2.0),
   (5, '2025-05-25', 4, 'Sprung', 1, 5, 6.0, 2.0);
+
+-- photos with recognized start numbers, one row per bib on the photo
+-- (eventId, bib) is not unique here: one athlete can be on many photos
+CREATE TABLE IF NOT EXISTS `pictures` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `eventId` int(10) unsigned NOT NULL,
+  `bib` int(10) unsigned NOT NULL,
+  `imagePath` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY (`eventId`, `bib`),
+  FOREIGN KEY (`eventId`) REFERENCES events(`id`),
+  FOREIGN KEY (`eventId`, `bib`) REFERENCES attendances(`eventId`, `bib`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 
 
