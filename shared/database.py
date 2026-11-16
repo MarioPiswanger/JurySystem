@@ -39,6 +39,7 @@ class Gender(IntEnum):
 class RankingType(IntEnum):
     NO_RANKING = 1
     RANKING = 0
+    TIME = 2
 
 @dataclass
 class User:

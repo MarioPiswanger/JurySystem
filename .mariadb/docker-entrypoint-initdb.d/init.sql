@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS `events` (
 
 INSERT INTO `events` (`id`, `name`, `userId`, `date`, `finished`, `deleted`, `customRanking`) VALUES
   (1, 'Bezirksmeisterschaften 2025', 2, '2025-05-28', 1, 0, 'goldThres, silberThres, bronzeThres = 30, 20, 10'),
-  (2, 'Bezirksmeisterschaften 2026', 2, '2026-05-28', 0, 0, 'goldThres, silberThres, bronzeThres = 30, 20, 10');
+  (2, 'Bezirksmeisterschaften 2026', 2, '2026-05-28', 0, 0, 'goldThres, silberThres, bronzeThres = 30, 20, 10'),
+  (3, 'Lauf', 2, '2026-09-20', 0, 0, '');
 
 CREATE TABLE IF NOT EXISTS `event_judges` (
   `eventId` int(10) unsigned NOT NULL,
@@ -89,7 +90,12 @@ CREATE TABLE IF NOT EXISTS `event_categories` (
 INSERT INTO `event_categories` (`name`, `eventId`, `gender`, `birthFrom`, `birthTo`, `rankingType`, `rankingAlgo`) VALUES
   ('Kn01', 1, 0, '1900-01-01', '2000-12-31', 0, ''),
   ('Kn02', 1, 0, '2000-01-01', '2099-12-31', 0, ''),
-  ('Md01', 1, 1, '1900-01-01', '2099-12-31', 1, '"gold" if sum > goldThres else "silber" if sum > silberThres else "bronze" if sum > bronzeThres else ""');
+  ('Md01', 1, 1, '1900-01-01', '2099-12-31', 1, '"gold" if sum > goldThres else "silber" if sum > silberThres else "bronze" if sum > bronzeThres else ""'),
+  -- Lauf: rankingType 2 = TIME, age split by birth year (50 or older in 2026 = born 1976 or earlier)
+  ('M U50', 3, 0, '1977-01-01', '2099-12-31', 2, ''),
+  ('M Ü50', 3, 0, '1900-01-01', '1976-12-31', 2, ''),
+  ('W U50', 3, 1, '1977-01-01', '2099-12-31', 2, ''),
+  ('W Ü50', 3, 1, '1900-01-01', '1976-12-31', 2, '');
 
 CREATE TABLE IF NOT EXISTS `event_disciplines` (
   `name` varchar(50) NOT NULL,
@@ -102,7 +108,8 @@ INSERT INTO `event_disciplines` (`name`, `eventId`) VALUES
   ('Reck', 1),
   ('Boden', 1),
   ('Sprung', 1),
-  ('Barren/Balken', 1);
+  ('Barren/Balken', 1),
+  ('Lauf', 3);
 
 CREATE TABLE IF NOT EXISTS `attendances` (
   `athleteId` int(10) unsigned NOT NULL,
