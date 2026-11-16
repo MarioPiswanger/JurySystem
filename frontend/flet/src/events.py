@@ -156,7 +156,7 @@ class EventEditView(View):
 
         user = self.page.session.get('user')
 
-        event = self.db.getEvent(eventId) if not createEvent else Event(0, "", user.id, datetime.datetime.now())
+        event = self.db.getEvent(eventId) if not createEvent else Event(0, "", user.id, datetime.datetime.now(), False, "")
 
         name_input = ft.TextField(label="Event Name", width=300, value=event.name)
         event_date_str = event.dateFormated()
