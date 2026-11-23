@@ -1,5 +1,5 @@
 import flet as ft
-from view import View
+from view import View, go, open_url
 
 
 class HelpView(View):
@@ -8,7 +8,7 @@ class HelpView(View):
         self.route = '/help'
         self.scroll = ft.ScrollMode.AUTO
         
-        last_route = self.page.session.get('last_route') or '/'
+        last_route = self.page.session.store.get('last_route') or '/'
         help_text = "Allgemeine Hilfe zum Jury System."
 
         if last_route == '/':
@@ -41,5 +41,5 @@ class HelpView(View):
         self.controls = [
             ft.AppBar(title=ft.Text('Help'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             ft.Container(content=ft.Text(help_text, size=16), padding=20),
-            ft.Container(content=ft.ElevatedButton('Back', on_click=lambda _: self.page.go(last_route)), padding=ft.padding.only(left=20)),
+            ft.Container(content=ft.Button('Back', on_click=lambda _: go(self.page, last_route)), padding=ft.Padding.only(left=20)),
         ]

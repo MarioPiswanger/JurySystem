@@ -1,4 +1,5 @@
 import flet as ft
+from view import go
 import secrets
 import sys
 import os
@@ -36,17 +37,17 @@ class Navigator:
         self.redis = redis
 
     def token(self):
-        return self.page.session.get('token')
+        return self.page.session.store.get('token')
 
     def setToken(self, token: str):
-        self.page.session.set('token', token)
-        user = self.page.session.get('user')
+        self.page.session.store.set('token', token)
+        user = self.page.session.store.get('user')
         self.redis.setex(token, 3600, str(user.id))
 
     def route_change(self, route):
         print(f'{route=}')
         if self.page.route != '/help':
-            self.page.session.set('last_route', self.page.route)
+            self.page.session.store.set('last_route', self.page.route)
         self.page.views.clear()
         if self.page.route.startswith('/public/liveEvent'):
             eventId = int(self.page.route.split('/')[-1])
@@ -100,14 +101,14 @@ class Navigator:
             userId = self.db.validateUserByToken(user, token)
             if userId is not None:
                 print(f"Redirecting user '{user}' logged in with url")
-                self.page.session.set('user', self.db.getUser(userId))
+                self.page.session.store.set('user', self.db.getUser(userId))
                 self.setToken(secrets.token_urlsafe())
-                self.page.go(f'/{target}/{id}')
+                go(self.page, f'/{target}/{id}')
             else:
-                self.page.go('/login')
-        elif self.page.session.get('user') is None:
+                go(self.page, '/login')
+        elif self.page.session.store.get('user') is None:
             print(f'store target={self.page.route}')
-            self.page.session.set('target', self.page.route)
+            self.page.session.store.set('target', self.page.route)
             self.page.views.append(LoginView(self.page, self.db, self.redis))
         elif self.page.route == '/help':
             self.page.views.append(HelpView(self.page, self.db, self.redis))
@@ -144,6 +145,6 @@ class Navigator:
         self.page.views.pop()
         try:
             top_view = self.page.views[-1]
-            self.page.go(top_view.route)
+            go(self.page, top_view.route)
         except IndexError:
             self.page.views.append(HomeView(self.page, self.db, self.redis))

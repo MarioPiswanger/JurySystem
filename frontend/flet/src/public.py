@@ -8,7 +8,7 @@ import httpx
 import pymysql
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
-from view import View
+from view import View, go, open_url
 from shared.database import Athlete, Gender, Progress, allowedCategories
 
 
@@ -25,7 +25,7 @@ class PublicSignupView(View):
             self.controls = [
                 ft.AppBar(title=ft.Text("Event-Anmeldung")),
                 ft.Text("Für dieses Event ist keine Anmeldung mehr möglich."),
-                ft.ElevatedButton("Zur Startseite", on_click=lambda _: self.page.go("/")),
+                ft.Button("Zur Startseite", on_click=lambda _: go(self.page, "/")),
             ]
             return
 
@@ -36,8 +36,8 @@ class PublicSignupView(View):
             label="Geschlecht",
             value=Gender.FEMALE.name,
             options=[
-                ft.dropdown.Option(key=Gender.FEMALE.name, text="Weiblich"),
-                ft.dropdown.Option(key=Gender.MALE.name, text="Männlich"),
+                ft.DropdownOption(key=Gender.FEMALE.name, text="Weiblich"),
+                ft.DropdownOption(key=Gender.MALE.name, text="Männlich"),
             ],
             width=240,
         )
@@ -83,7 +83,7 @@ class PublicSignupView(View):
                 hidden=False,
             )
             matches = allowedCategories(categories, athlete)
-            category.options = [ft.dropdown.Option(c.name) for c in matches]
+            category.options = [ft.DropdownOption(c.name) for c in matches]
             category.value = matches[0].name if len(matches) == 1 else None
             self.page.update()
 
@@ -92,10 +92,10 @@ class PublicSignupView(View):
                 birth.value = e.control.value.strftime("%d.%m.%Y")
                 updateCategories()
 
-        birth_picker = ft.ElevatedButton(
+        birth_picker = ft.Button(
             "Geburtsdatum wählen",
             icon=ft.Icons.CALENDAR_MONTH,
-            on_click=lambda _: self.page.open(
+            on_click=lambda _: self.page.show_dialog(
                 ft.DatePicker(
                     first_date=datetime.datetime(1920, 1, 1),
                     last_date=datetime.datetime.now(),
@@ -104,7 +104,7 @@ class PublicSignupView(View):
             ),
         )
 
-        gender.on_change = updateCategories
+        gender.on_select = updateCategories
 
         def submit(_):
             values = {
@@ -169,9 +169,9 @@ class PublicSignupView(View):
                 )
                 return
 
-            self.page.session.set("user", self.db.getUser(user_id))
+            self.page.session.store.set("user", self.db.getUser(user_id))
             self.setToken(secrets.token_urlsafe())
-            self.page.go("/")
+            go(self.page, "/")
             self._show_message(f"Du bist für {event.name} angemeldet.")
 
         password_confirm.on_submit = submit
@@ -197,20 +197,20 @@ class PublicSignupView(View):
                         ft.Row([birth, birth_picker], wrap=True),
                         gender,
                         category,
-                        ft.ElevatedButton("Konto erstellen und anmelden", on_click=submit),
-                        ft.TextButton("Zurück zur Startseite", on_click=lambda _: self.page.go("/")),
+                        ft.Button("Konto erstellen und anmelden", on_click=submit),
+                        ft.TextButton("Zurück zur Startseite", on_click=lambda _: go(self.page, "/")),
                     ],
                     width=480,
                     spacing=12,
                     horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
                 ),
-                alignment=ft.alignment.top_center,
+                alignment=ft.Alignment.TOP_CENTER,
                 padding=24,
             ),
         ]
 
     def _show_message(self, message: str):
-        self.page.open(ft.SnackBar(ft.Text(message)))
+        self.page.show_dialog(ft.SnackBar(ft.Text(message)))
 
 class ImagesView(View):
     def __init__(self, page: ft.Page, db, redis):
@@ -223,10 +223,10 @@ class ImagesView(View):
         self.event_picker = ft.Dropdown(
             label="Event",
             options=[
-                ft.dropdown.Option(key=event.id, text=event.descr())
+                ft.DropdownOption(key=str(event.id), text=event.descr())
                 for event in events
             ],
-            value=events[0].id if events else None,
+            value=str(events[0].id) if events else None,
             width=360,
         )
         self.bib_number = ft.TextField(
@@ -236,11 +236,8 @@ class ImagesView(View):
             width=240,
             on_submit=self.search,
         )
-        self.file_picker = ft.FilePicker(
-            on_result=self.files_picked,
-            on_upload=self.upload_progress,
-        )
-        self.page.overlay.append(self.file_picker)
+        # flet 1.x: FilePicker is a service and must not be added to the overlay
+        self.file_picker = ft.FilePicker(on_upload=self.upload_progress)
         self.upload_count = 0
         self.uploaded_count = 0
 
@@ -261,7 +258,7 @@ class ImagesView(View):
                             [
                                 self.event_picker,
                                 self.bib_number,
-                                ft.ElevatedButton("Bilder suchen", on_click=self.search),
+                                ft.Button("Bilder suchen", on_click=self.search),
                             ],
                             wrap=True,
                         ),
@@ -274,7 +271,7 @@ class ImagesView(View):
             ),
         ]
 
-        user = self.page.session.get("user")
+        user = self.page.session.store.get("user")
         if user is not None and user.isHost():
             controls.append(
                 ft.Container(
@@ -286,7 +283,7 @@ class ImagesView(View):
                                 "Wähle das Event aus und lade JPEG- oder PNG-Bilder hoch. "
                                 "Die Startnummern werden beim Upload erkannt."
                             ),
-                            ft.ElevatedButton(
+                            ft.Button(
                                 "Bilder auswählen",
                                 icon=ft.Icons.UPLOAD_FILE,
                                 on_click=self.upload,
@@ -298,7 +295,7 @@ class ImagesView(View):
                 )
             )
         controls.append(
-            ft.ElevatedButton("Zur Startseite", on_click=lambda _: self.page.go("/"))
+            ft.Button("Zur Startseite", on_click=lambda _: go(self.page, "/"))
         )
         self.controls = controls
 
@@ -338,35 +335,35 @@ class ImagesView(View):
                 ft.Image(
                     src=f"https://{View.api()}{image['url']}",
                     width=360,
-                    fit=ft.ImageFit.CONTAIN,
+                    fit=ft.BoxFit.CONTAIN,
                 )
                 for image in images
             ]
         self.page.update()
 
-    def upload(self, _):
-        user = self.page.session.get("user")
+    async def upload(self, _):
+        user = self.page.session.store.get("user")
         if user is None or not user.isHost():
             self.status.value = "Nur Hosts und Administratoren dürfen Bilder hochladen."
             self.page.update()
             return
 
-        self.file_picker.pick_files(
+        files = await self.file_picker.pick_files(
             dialog_title="Bilder auswählen",
             allow_multiple=True,
             file_type=ft.FilePickerFileType.CUSTOM,
             allowed_extensions=["jpg", "jpeg", "png"],
         )
+        await self.files_picked(files or [])
 
-    def files_picked(self, e):
-        files = e.files or []
+    async def files_picked(self, files):
         if not files:
             return
         if self.event_picker.value is None:
             self.status.value = "Bitte zuerst ein Event auswählen."
             self.page.update()
             return
-        user = self.page.session.get("user")
+        user = self.page.session.store.get("user")
         if user is None or not user.isHost():
             self.status.value = "Nur Hosts und Administratoren dürfen Bilder hochladen."
             self.page.update()
@@ -381,7 +378,7 @@ class ImagesView(View):
             f"https://{View.api()}/images/upload/"
             f"{self.event_picker.value}/{user.id}/{self.token()}"
         )
-        self.file_picker.upload(
+        await self.file_picker.upload(
             [
                 ft.FilePickerUploadFile(
                     name=file.name,

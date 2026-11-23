@@ -2,7 +2,7 @@ import os
 import sys
 from typing import List
 import flet as ft
-from view import View
+from view import View, go, open_url
 import datetime
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
@@ -30,13 +30,13 @@ class CategoriesView(View):
         gender_field = ft.Dropdown(
             label="Gender",
             width=200,
-            options=[ft.dropdown.Option(g.name) for g in Gender]
+            options=[ft.DropdownOption(g.name) for g in Gender]
         )
 
         ranking_type_field = ft.Dropdown(
             label="Ranking Type",
             width=200,
-            options=[ft.dropdown.Option(r.name) for r in RankingType]
+            options=[ft.DropdownOption(r.name) for r in RankingType]
         )
 
         # ========= Geburtsdatum Textfelder (jetzt 115px breit!) =========
@@ -46,14 +46,14 @@ class CategoriesView(View):
         # ========= DatePicker Functions =========
 
         def set_birth_from(e):
-            if e.data:
-                self.birth_from = datetime.datetime.fromisoformat(e.data)
+            if e.control.value:
+                self.birth_from = e.control.value
                 birth_from_text.value = self.birth_from.strftime('%d.%m.%Y')
                 page.update()
 
         def set_birth_to(e):
-            if e.data:
-                self.birth_to = datetime.datetime.fromisoformat(e.data)
+            if e.control.value:
+                self.birth_to = e.control.value
                 birth_to_text.value = self.birth_to.strftime('%d.%m.%Y')
                 page.update()
 
@@ -74,13 +74,13 @@ class CategoriesView(View):
         birth_from_button = ft.IconButton(
             icon=ft.Icons.CALENDAR_MONTH,
             tooltip="Pick date",
-            on_click=lambda _: page.open(picker_from)
+            on_click=lambda _: page.show_dialog(picker_from)
         )
 
         birth_to_button = ft.IconButton(
             icon=ft.Icons.CALENDAR_MONTH,
             tooltip="Pick date",
-            on_click=lambda _: page.open(picker_to)
+            on_click=lambda _: page.show_dialog(picker_to)
         )
 
         # ========= SAVE BUTTON =========
@@ -100,16 +100,16 @@ class CategoriesView(View):
                 success = False
                 if self.editing_old_name:
                     if self.db.updateEventCategory(cat, self.editing_old_name):
-                        page.open(ft.SnackBar(ft.Text("Category updated", size=18), bgcolor="green"))
+                        page.show_dialog(ft.SnackBar(ft.Text("Category updated", size=18), bgcolor="green"))
                         success = True
                     else:
-                        page.open(ft.SnackBar(ft.Text("Error updating category", size=18), bgcolor="red"))
+                        page.show_dialog(ft.SnackBar(ft.Text("Error updating category", size=18), bgcolor="red"))
                 else:
                     if self.db.insertEventCategory(cat):
-                        page.open(ft.SnackBar(ft.Text("Category saved", size=18), bgcolor="green"))
+                        page.show_dialog(ft.SnackBar(ft.Text("Category saved", size=18), bgcolor="green"))
                         success = True
                     else:
-                        page.open(ft.SnackBar(ft.Text("Error saving category", size=18), bgcolor="red"))
+                        page.show_dialog(ft.SnackBar(ft.Text("Error saving category", size=18), bgcolor="red"))
 
                 if success:
                     # Clear input fields
@@ -129,7 +129,7 @@ class CategoriesView(View):
                     self.page.update()
 
             except Exception as ex:
-                page.open(ft.SnackBar(ft.Text(f"Error: {ex}", size=18), bgcolor="red"))
+                page.show_dialog(ft.SnackBar(ft.Text(f"Error: {ex}", size=18), bgcolor="red"))
 
         save_button = ft.IconButton(
             icon=ft.Icons.CHECK_CIRCLE,
@@ -168,13 +168,13 @@ class CategoriesView(View):
 
         def delete_clicked(e, category_name):
             def confirm_delete(e):
+                page.pop_dialog()
                 if self.db.removeEventCategory(self.eventId, category_name):
-                    page.open(ft.SnackBar(ft.Text("Category deleted", size=18), bgcolor="green"))
+                    page.show_dialog(ft.SnackBar(ft.Text("Category deleted", size=18), bgcolor="green"))
                     self.table.rows = create_rows()
                     self.table.update()
                 else:
-                    page.open(ft.SnackBar(ft.Text("Error deleting category", size=18), bgcolor="red"))
-                page.close(dlg)
+                    page.show_dialog(ft.SnackBar(ft.Text("Error deleting category", size=18), bgcolor="red"))
 
             dlg = ft.AlertDialog(
                 modal=True,
@@ -182,11 +182,11 @@ class CategoriesView(View):
                 content=ft.Text(f"Do you want to delete the category '{category_name}'?"),
                 actions=[
                     ft.TextButton("Yes", on_click=confirm_delete),
-                    ft.TextButton("No", on_click=lambda e: page.close(dlg)),
+                    ft.TextButton("No", on_click=lambda e: page.pop_dialog()),
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
             )
-            page.open(dlg)
+            page.show_dialog(dlg)
 
         # ========= Load existing categories and create rows for them =========
         def create_rows():
@@ -231,9 +231,6 @@ class CategoriesView(View):
             ft.Text("Add new Category", size=20),
             input_controls,
             ft.Row([self.table], scroll=ft.ScrollMode.AUTO),
-            ft.ElevatedButton("Back", on_click=lambda _: self.page.go("/events"))
+            ft.Button("Back", on_click=lambda _: go(self.page, "/events"))
         ]
 
-        # Add pickers to the page's overlay so they can be opened from anywhere
-        page.overlay.extend([picker_from, picker_to])
-        # No need to call page.update() here as the view will be built and updated by the navigator

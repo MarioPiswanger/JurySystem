@@ -1,7 +1,7 @@
 import os
 import sys
 import flet as ft
-from view import View
+from view import View, go, open_url
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from shared.database import JuryDatabase, Athlete, AthleteRatings, AthleteRanking, Gender
@@ -39,18 +39,18 @@ class RankingView(View):
         self.categoryEdit = ft.Dropdown(
             label="Category",
             width = 300,
-            options=[ft.dropdownm2.Option('All')] + [ft.dropdownm2.Option(d.name) for d in self.categories],
-            on_change=updateRankings
+            options=[ft.DropdownOption('All')] + [ft.DropdownOption(d.name) for d in self.categories],
+            on_select=updateRankings
         )
 
         self.updateControls()
 
     def AthleteRankingAsRow(self, ranking: AthleteRanking, index: int):
         cells = [
-            ft.DataCell(ft.Text(index + 1)),
+            ft.DataCell(ft.Text(str(index + 1))),
             ft.DataCell(ft.Text(ranking.ratings.eventCategoryName)),
-            ft.DataCell(ft.Text(ranking.ratings.group)),
-            ft.DataCell(ft.Text(ranking.ranking)),
+            ft.DataCell(ft.Text(str(ranking.ratings.group or ''))),
+            ft.DataCell(ft.Text(str(ranking.ranking))),
             ft.DataCell(ft.Text(ranking.ratings.athlete.name()))
             ]
         cells += [ratingCell(ranking.ratings, d.name) for d in self.disciplines]
@@ -65,15 +65,15 @@ class RankingView(View):
 
         def printList(e, d):
             if self.categoryEdit.value:
-                self.page.launch_url(f'https://{View.api()}/ranking/{self.token()}/{self.event.id}/{self.categoryEdit.value}/{d}')
+                open_url(self.page, f'https://{View.api()}/ranking/{self.token()}/{self.event.id}/{self.categoryEdit.value}/{d}')
 
         def printCert(e):
             if self.categoryEdit.value:
-                self.page.launch_url(f'https://{View.api()}/certificate/{self.token()}/{self.event.id}/{self.categoryEdit.value}')
+                open_url(self.page, f'https://{View.api()}/certificate/{self.token()}/{self.event.id}/{self.categoryEdit.value}')
 
         def exportXlsx(e):
             if self.categoryEdit.value:
-                self.page.launch_url(f'https://{View.api()}/ranking_xlsx/{self.token()}/{self.event.id}/{self.categoryEdit.value}')
+                open_url(self.page, f'https://{View.api()}/ranking_xlsx/{self.token()}/{self.event.id}/{self.categoryEdit.value}')
 
         controls = []
         disablePdf = self.categoryEdit.value == 'All'
@@ -103,10 +103,10 @@ class RankingView(View):
                               tooltip="xlsx",
                               on_click=exportXlsx))
 
-        controls.append(ft.ElevatedButton("Home", on_click=lambda _: self.page.go("/")))
+        controls.append(ft.Button("Home", on_click=lambda _: go(self.page, "/")))
 
         self.controls = [
-            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: self.page.go('/help')), title=ft.Text('Ranking'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
+            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: go(self.page, '/help')), title=ft.Text('Ranking'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             ft.Text(self.event.name, size=30, color=ft.Colors.PINK_600, italic=True),
             self.categoryEdit,
             ft.Row([self.table], scroll=ft.ScrollMode.AUTO),

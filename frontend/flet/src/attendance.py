@@ -1,7 +1,7 @@
 import os
 import sys
 import flet as ft
-from view import View
+from view import View, go, open_url
 from translate import tr
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
@@ -9,7 +9,7 @@ from shared.database import JuryDatabase, User, Athlete, Attendance, Gender, Eve
 
 class AttendanceView(View):
     def user(self) -> User:
-        return self.page.session.get('user')
+        return self.page.session.store.get('user')
     
     def __init__(self, page: ft.Page, db, redis):
         super().__init__(page, db, redis)
@@ -24,18 +24,18 @@ class AttendanceView(View):
             if self.eventCtrl.value is None:
                 return
             eventId = self.eventCtrl.value
-            page.launch_url(f'https://{View.api()}/attendances/{self.token()}/{self.user().id}/{eventId}')
+            open_url(self.page, f'https://{View.api()}/attendances/{self.token()}/{self.user().id}/{eventId}')
 
         def exportXlsx(e):
             if self.eventCtrl.value is None:
                 return
             eventId = self.eventCtrl.value
-            page.launch_url(f'https://{View.api()}/attendances_xlsx/{self.token()}/{self.user().id}/{eventId}')
+            open_url(self.page, f'https://{View.api()}/attendances_xlsx/{self.token()}/{self.user().id}/{eventId}')
 
         def createRows():
             if self.eventCtrl.value is None:
                 return []
-            event = self.db.getEvent(self.eventCtrl.value)
+            event = self.db.getEvent(int(self.eventCtrl.value))
             categories = self.db.getEventCategories(event.id)
 
             athletes = []
@@ -83,14 +83,14 @@ class AttendanceView(View):
             
         def updateRows(e):
             self.table.rows = createRows()
-            e.control.page.update()
+            self.page.update()
 
 
         options = []
         for event in self.db.getAllEvents():
             options.append(
-                ft.dropdown.Option(
-                    key=event.id,
+                ft.DropdownOption(
+                    key=str(event.id),
                     text=event.descr()
                 )
             )
@@ -100,7 +100,7 @@ class AttendanceView(View):
             label=self.tr.tr("select event"),
             options=options,
             width=400,
-            on_change=updateRows
+            on_select=updateRows
         )
 
         column_names = [
@@ -149,7 +149,7 @@ class AttendanceView(View):
         self.table.columns[self.sort_column_index].sort_ascending = self.sort_ascending
         title = f'{self.tr.tr("Attendances of")} {self.user().username if self.user().isHost() else self.user().team}'
         self.controls = [
-            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr("Help"), on_click=lambda _: self.page.go('/help')), title=ft.Text(title), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
+            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr("Help"), on_click=lambda _: go(self.page, '/help')), title=ft.Text(title), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             self.eventCtrl,
             ft.Row([self.table], scroll=ft.ScrollMode.AUTO),
             ft.Row(spacing=0, controls=[
@@ -161,7 +161,7 @@ class AttendanceView(View):
                           icon_color=ft.Colors.BLUE_300,
                           tooltip="xlsx",
                           on_click=exportXlsx)]),
-            ft.ElevatedButton(self.tr.tr("Home"), on_click=lambda _: self.page.go("/")),
+            ft.Button(self.tr.tr("Home"), on_click=lambda _: go(self.page, "/")),
         ]
 
     def attendanceAsRow(self, athlete: Athlete, event: Event, categories: list, team_name: str):
@@ -177,7 +177,7 @@ class AttendanceView(View):
                     groupCell.content.disabled = True
                 categoryCell.content.disabled = False
                 allowed = allowedCategories(categories, athlete)
-                categoryCell.content.options = [ft.dropdown.Option(d.name) for d in allowed]
+                categoryCell.content.options = [ft.DropdownOption(d.name) for d in allowed]
             else:
                 print(f'denominate {athlete.name()} for {event.descr()}')
                 self.db.hideAttendance(event.id, athlete.id, True)
@@ -202,9 +202,9 @@ class AttendanceView(View):
         allowed = allowedCategories(categories, athlete)
         categoryCell = ft.DataCell(ft.Dropdown(
                     disabled=not attendance,
-                    options=list() if attendance is None else [ft.dropdown.Option(d.name) for d in allowed],
+                    options=list() if attendance is None else [ft.DropdownOption(d.name) for d in allowed],
                     value=attendance.eventCategoryName if attendance else None,
-                    on_change=onUpdateCategory
+                    on_select=onUpdateCategory
                     ))
         groupCell = ft.DataCell(ft.TextField(
                     disabled=not attendance or not self.user().isHost(),

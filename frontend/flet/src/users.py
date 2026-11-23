@@ -1,7 +1,7 @@
 import os
 import sys
 import flet as ft
-from view import View
+from view import View, go, open_url
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from shared.database import JuryDatabase, User, Restrictions
@@ -20,14 +20,13 @@ class UserView(View):
             user = self.db.getUser(userId)
             def yes(e):
                 self.db.removeUser(userId)
-                dlg.open = False
+                self.page.pop_dialog()
                 self.table.rows = createRows()
-                e.control.page.update()
+                self.page.update()
 
             def no(e):
                 print('cancel')
-                dlg.open = False
-                e.control.page.update()
+                self.page.pop_dialog()
 
             dlg = ft.AlertDialog(
                 modal=True,
@@ -37,18 +36,15 @@ class UserView(View):
                     ft.TextButton("No", on_click=no),
                 ],
                 actions_alignment=ft.MainAxisAlignment.END)
-            e.control.page.overlay.append(dlg)
-            dlg.open = True
-            e.control.page.update()
+            self.page.show_dialog(dlg)
 
         def editFunc(e, userId):
             print(f'edit {userId=}')
-            self.page.go(f'/userEdit/{userId}')
+            go(self.page, f'/userEdit/{userId}')
 
         def addFunc(e):
-            self.page.go(f'/userEdit/0')
+            go(self.page, f'/userEdit/0')
 
-        self.page = page
         self.route = '/users'
         self.scroll = ft.ScrollMode.AUTO
         self.table = ft.DataTable(
@@ -56,13 +52,13 @@ class UserView(View):
                 rows=createRows()
             )
         self.controls = [
-            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: self.page.go('/help')), title=ft.Text("Users"), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
+            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: go(self.page, '/help')), title=ft.Text("Users"), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             ft.Row([self.table], scroll=ft.ScrollMode.AUTO),
             ft.IconButton(ft.Icons.ADD_CIRCLE,
                     icon_color=ft.Colors.BLUE_300,
                     tooltip="Add",
                     on_click=addFunc),
-            ft.ElevatedButton("Home", on_click=lambda _: self.page.go("/")),
+            ft.Button("Home", on_click=lambda _: go(self.page, "/")),
         ]
 
     def userAsRow(self, user: User, editFunc: callable, deleteFunc: callable):
@@ -80,8 +76,8 @@ class UserView(View):
             ft.DataCell(ft.Text(user.username)),
             ft.DataCell(ft.Text(user.email)),
             ft.DataCell(ft.Text(user.team)),
-            ft.DataCell(ft.Text(user.registered)),
-            ft.DataCell(ft.Text(user.expires)),
+            ft.DataCell(ft.Text(str(user.registered or ''))),
+            ft.DataCell(ft.Text(str(user.expires or ''))),
             ft.DataCell(ft.Text(user.restrictions.name)),
             ft.DataCell(ft.Checkbox(value=user.locked, disabled=True))
             ]
@@ -102,11 +98,11 @@ class UserEditView(View):
             else:
                 print(f'saving {userId=}')
                 self.db.updateUser(userId, nameEdit.value, passwordEdit.value, emailEdit.value, teamEdit.value, expiresEdit.value, Restrictions[resitrictionsEdit.value], lockedEdit.value, langEdt.value)
-            self.page.go("/users")
+            go(self.page, "/users")
 
         def cancel(e):
             print(f'cancel {userId=}')
-            self.page.go("/users")
+            go(self.page, "/users")
 
         print(f'get user {userId=}')
         if not createUser:
@@ -119,13 +115,13 @@ class UserEditView(View):
         resitrictionsEdit = ft.Dropdown(
             label="Restrictions",
             width = 300,
-            options=[ft.dropdownm2.Option(e.name) for e in Restrictions],
+            options=[ft.DropdownOption(e.name) for e in Restrictions],
             value=Restrictions.TRAINER.name if createUser else user.restrictions.name)
-        langEdt = ft.Dropdown(label="Language", width=300, options=[ft.dropdownm2.Option(l) for l in ['en', 'ge']], value='en' if createUser else user.language)
-        expiresEdit = ft.TextField(label="expires", value=None if createUser else user.expires)
+        langEdt = ft.Dropdown(label="Language", width=300, options=[ft.DropdownOption(l) for l in ['en', 'ge']], value='en' if createUser else user.language)
+        expiresEdit = ft.TextField(label="expires", value=None if createUser or user.expires is None else str(user.expires))
         lockedEdit = ft.Checkbox(label="locked", value=False if createUser else user.locked)
         self.controls = [
-            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: self.page.go('/help')), title=ft.Text(f'{'Create ' if createUser else 'Edit '} User'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
+            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: go(self.page, '/help')), title=ft.Text(f'{'Create ' if createUser else 'Edit '} User'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             nameEdit,
             passwordEdit,
             emailEdit,
@@ -150,5 +146,5 @@ class UserEditView(View):
                         icon_color=ft.Colors.RED_300,
                         tooltip="Cancel",
                         on_click=cancel)], scroll=ft.ScrollMode.AUTO),
-            ft.ElevatedButton("Home", on_click=lambda _: self.page.go("/"))
+            ft.Button("Home", on_click=lambda _: go(self.page, "/"))
         ]

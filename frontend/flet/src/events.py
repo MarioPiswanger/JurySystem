@@ -2,7 +2,7 @@ import os
 import sys
 import flet as ft
 import datetime
-from view import View
+from view import View, go, open_url
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from shared.database import JuryDatabase, Event, Progress
@@ -43,15 +43,15 @@ def eventAsRow(tr, event: Event, editFunc: callable, deleteFunc: callable, finis
         ft.DataCell(ft.IconButton(icon=ft.Icons.CATEGORY,
                                 icon_color=ft.Colors.BLUE_300,
                                 tooltip="Categories",
-                                on_click=lambda e: e.control.page.go(f"/categories/{event.id}"))),
+                                on_click=lambda e: go(e.control.page, f"/categories/{event.id}"))),
         ft.DataCell(ft.IconButton(icon=ft.Icons.FITNESS_CENTER,
                                 icon_color=ft.Colors.ORANGE_300,
                                 tooltip="Disciplines",
-                                on_click=lambda e: e.control.page.go(f"/disciplines/{event.id}"))),
+                                on_click=lambda e: go(e.control.page, f"/disciplines/{event.id}"))),
         ft.DataCell(ft.IconButton(icon=ft.Icons.BALANCE_ROUNDED,
                                 icon_color=ft.Colors.GREEN_300,
                                 tooltip="Judges",
-                                on_click=lambda e: e.control.page.go(f"/eventJudges/{event.id}"))),
+                                on_click=lambda e: go(e.control.page, f"/eventJudges/{event.id}"))),
         ft.DataCell(finishButon)
         ]
     return ft.DataRow(cells=cells)
@@ -62,26 +62,25 @@ class EventView(View):
         self.route = "/events"
         self.scroll = ft.ScrollMode.AUTO
 
-        user = self.page.session.get('user')
+        user = self.page.session.store.get('user')
 
         def addFunc(e):
-            self.page.go("/eventEdit/0")
+            go(self.page, "/eventEdit/0")
 
         def editFunc(e, eventId):
-            self.page.go(f"/eventEdit/{eventId}")
+            go(self.page, f"/eventEdit/{eventId}")
 
         def deleteFunc(e, eventId):
             event = self.db.getEvent(eventId)
             def yes(e):
                 self.db.removeEvent(eventId)
-                dlg.open = False
+                self.page.pop_dialog()
                 self.table.rows = createRows()
-                e.control.page.update()
+                self.page.update()
 
             def no(e):
                 print('cancel')
-                dlg.open = False
-                e.control.page.update()
+                self.page.pop_dialog()
 
             dlg = ft.AlertDialog(
                 modal=True,
@@ -91,22 +90,19 @@ class EventView(View):
                     ft.TextButton("No", on_click=no),
                 ],
                 actions_alignment=ft.MainAxisAlignment.END)
-            e.control.page.overlay.append(dlg)
-            dlg.open = True
-            e.control.page.update()
+            self.page.show_dialog(dlg)
 
         def finishEvent(e, eventId: int, finish: bool):
             event = self.db.getEvent(eventId)
             def yes(e):
                 self.db.finishEvent(eventId, finish)
-                dlg.open = False
+                self.page.pop_dialog()
                 self.table.rows = createRows()
-                e.control.page.update()
+                self.page.update()
 
             def no(e):
                 print('cancel')
-                dlg.open = False
-                e.control.page.update()
+                self.page.pop_dialog()
 
             msg = self.tr.tr('Finish Event' if finish else 'Open Event')
 
@@ -118,9 +114,7 @@ class EventView(View):
                     ft.TextButton(self.tr.tr("No"), on_click=no),
                 ],
                 actions_alignment=ft.MainAxisAlignment.END)
-            e.control.page.overlay.append(dlg)
-            dlg.open = True
-            e.control.page.update()
+            self.page.show_dialog(dlg)
         
         def createRows():
             return [eventAsRow(self.tr, event, editFunc, deleteFunc, finishEvent) for event in self.db.getEvents(user.id)]
@@ -131,7 +125,7 @@ class EventView(View):
         )
 
         self.controls = [
-            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: self.page.go('/help')), title=ft.Text(f'Events of {user.username}'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
+            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: go(self.page, '/help')), title=ft.Text(f'Events of {user.username}'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             ft.Row([self.table], scroll=ft.ScrollMode.AUTO),
             ft.Row(
                 spacing=0,
@@ -144,7 +138,7 @@ class EventView(View):
                     )
                 ]
             ),
-            ft.ElevatedButton("Home", on_click=lambda _: self.page.go("/"))
+            ft.Button("Home", on_click=lambda _: go(self.page, "/"))
         ]
 
 class EventEditView(View):
@@ -154,7 +148,7 @@ class EventEditView(View):
         self.scroll = ft.ScrollMode.AUTO
         createEvent = eventId == 0
 
-        user = self.page.session.get('user')
+        user = self.page.session.store.get('user')
 
         event = self.db.getEvent(eventId) if not createEvent else Event(0, "", user.id, datetime.datetime.now(), False, "")
 
@@ -174,10 +168,10 @@ class EventEditView(View):
                 self.event_date.value = d.strftime("%d.%m.%Y")
                 self.page.update()
 
-        date_input = ft.ElevatedButton(
+        date_input = ft.Button(
             "Pick date",
             icon=ft.Icons.CALENDAR_MONTH,
-            on_click=lambda e: page.open(
+            on_click=lambda e: page.show_dialog(
                 ft.DatePicker(
                     first_date=datetime.datetime(year=1980, month=1, day=1),
                     last_date=datetime.datetime(year=2030, month=12, day=31),
@@ -198,7 +192,7 @@ class EventEditView(View):
             date = self.event_date.value.strip()
             
             if not name or not date:
-                self.page.open(ft.SnackBar(ft.Text("Bitte Name und Datum eingeben!"), bgcolor="red"))
+                self.page.show_dialog(ft.SnackBar(ft.Text("Bitte Name und Datum eingeben!"), bgcolor="red"))
                 return
 
             if createEvent:
@@ -206,13 +200,13 @@ class EventEditView(View):
             else:
                 self.db.updateEvent(event.id, name, user.id, Event.dateFromString(date), rating_input.value)
 
-            self.page.go("/events")
+            go(self.page, "/events")
 
         def cancel(e):
-            self.page.go("/events")
+            go(self.page, "/events")
 
         self.controls = [
-            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: self.page.go('/help')), title=ft.Text("Event erstellen" if createEvent else "Event bearbeiten"),
+            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: go(self.page, '/help')), title=ft.Text("Event erstellen" if createEvent else "Event bearbeiten"),
                       bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             name_input,
             self.event_date,

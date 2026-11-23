@@ -1,8 +1,8 @@
 import os
 import sys
 import flet as ft
-from view import View
-from apscheduler.schedulers.background import BackgroundScheduler
+from view import View, go, open_url
+import asyncio
 import time
 from datetime import datetime
 
@@ -29,26 +29,32 @@ def ratingAsRow(user: User, athlete: Athlete, attendance: Attendance, event: Eve
 class LiveEventView(View):
     def __init__(self, page: ft.Page, db, redis, eventId):
         super().__init__(page, db, redis)
-        self.page = page
         self.route =f'/public/liveEvent/{eventId}'
         self.scroll = ft.ScrollMode.AUTO
 
+        self._running = True
+
         async def handle_disconnect(e):
-            self.scheduler.remove_job(self.job.id)
-            print('removed job')
+            self._running = False
+            print('stopped live update')
 
         def onServerTime():
             t = time.strftime('%H:%M:%S', time.localtime())
             self.updateTableIfNewer()
             self.controls = [
-                ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: self.page.go('/help')), title=ft.Text(f'Live ratings of {self.event.name}, {t}'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
+                ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: go(self.page, '/help')), title=ft.Text(f'Live ratings of {self.event.name}, {t}'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
                 ft.Row([self.table], scroll=ft.ScrollMode.AUTO)
             ]
-            if self.page is not None:
-                self.page.update()
+            self.page.update()
 
-        self.scheduler = BackgroundScheduler()
-        self.job = self.scheduler.add_job(onServerTime, 'interval', seconds=1)
+        # flet 1.x: page updates must happen on the event loop, not in a background thread
+        async def liveUpdate():
+            while self._running:
+                await asyncio.sleep(1)
+                if not self._running or all(v is not self for v in self.page.views):
+                    break
+                onServerTime()
+
         self.page.on_disconnect = handle_disconnect
 
         self.event = self.db.getEvent(eventId)
@@ -56,11 +62,15 @@ class LiveEventView(View):
         self.updateTableIfNewer()
 
         self.controls = [
-            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: self.page.go('/help')), title=ft.Text(f'Live ratings of {self.event.name}'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
+            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: go(self.page, '/help')), title=ft.Text(f'Live ratings of {self.event.name}'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             ft.Row([self.table], scroll=ft.ScrollMode.AUTO)
         ]
-        self.scheduler.start()
-    
+        self.page.run_task(liveUpdate)
+
+    def will_unmount(self):
+        self._running = False
+        super().will_unmount()
+
     def updateTableIfNewer(self):
         ratingTs = self.db.getRecentRatingTs(self.event.id)
         if self.recentRatingTs is not None and ratingTs <= self.recentRatingTs:
@@ -79,5 +89,5 @@ class LiveEventView(View):
                 columns=[ft.DataColumn(ft.Text(h)) for h in header()],
                 rows=rows,
                 column_spacing=5,
-                vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE)
+                vertical_lines=ft.BorderSide(1, ft.Colors.OUTLINE)
             )

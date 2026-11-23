@@ -1,7 +1,7 @@
 import os
 import sys
 import flet as ft
-from view import View
+from view import View, go, open_url
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from shared.database import *
@@ -20,7 +20,7 @@ class EventJudgesView(View):
         def addJudge(e):
             if not self.judgeInput.value:
                 return
-            self.db.addEventJudge(eventId, self.judgeInput.value)
+            self.db.addEventJudge(eventId, int(self.judgeInput.value))
             updateTable()
             self.page.update()
 
@@ -32,8 +32,8 @@ class EventJudgesView(View):
         self.judgeInput = ft.Dropdown(
             label="Add Judge",
             width=300,
-            options=[ft.dropdown.Option(
-                key=u.id,
+            options=[ft.DropdownOption(
+                key=str(u.id),
                 text=u.username) for u in self.db.getAllJudges() if u.valid() and not u.hidden]
         )
 
@@ -51,7 +51,7 @@ class EventJudgesView(View):
         updateTable()
 
         def printJudgeLogins(e):
-            self.page.launch_url(f'https://{View.api()}/judgelogins/{self.token()}/{eventId}/rating_{eventId}')
+            open_url(self.page, f'https://{View.api()}/judgelogins/{self.token()}/{eventId}/rating_{eventId}')
 
         self.controls = [
             ft.AppBar(title=ft.Text(f"Judges for {self.event.name}"), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
@@ -59,13 +59,13 @@ class EventJudgesView(View):
             ft.Row([self.table], scroll=ft.ScrollMode.AUTO),
             ft.Row([
                 ft.IconButton(icon=ft.Icons.CONTACT_PAGE, tooltip="Logins for judges", on_click=printJudgeLogins),
-                ft.ElevatedButton("Back", on_click=lambda _: self.page.go("/events"))
+                ft.Button("Back", on_click=lambda _: go(self.page, "/events"))
             ])
         ]
 
     def asRow(self, judgeId, judgeName, can_remove, deleteFunc):
         def downlodQR(e):
-            e.page.launch_url(f'https://{View.api()}/qrcodes/login/{self.token()}/{judgeId}/rating_{self.event.id}')
+            open_url(self.page, f'https://{View.api()}/qrcodes/login/{self.token()}/{judgeId}/rating_{self.event.id}')
 
         def recreateQr(e):
             self.db.recreateUserToken(judgeId)

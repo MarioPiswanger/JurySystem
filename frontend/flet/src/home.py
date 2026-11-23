@@ -2,22 +2,27 @@ import os
 import sys
 import flet as ft
 import secrets
-from view import View
+from view import View, go, open_url
 from translate import tr
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from shared.database import JuryDatabase, Athlete, Gender, Event, Progress, Restrictions
 from shared.rights import Route, allowedRoutes
 
-class TextButton(ft.TextButton):
-    def __init__(self, text = None, icon = None, icon_color = None, content = None, style=ft.ButtonStyle(text_style=ft.TextStyle(size=16), side=ft.BorderSide(1, ft.Colors.OUTLINE)), autofocus = None, url = None, url_target = None, clip_behavior = None, on_click = None, on_long_press = None, on_hover = None, on_focus = None, on_blur = None, ref = None, key = None, width= 144, height = 48, left = None, top = None, right = None, bottom = None, expand = None, expand_loose = None, col = None, opacity = None, rotate = None, scale = None, offset = None, aspect_ratio = None, animate_opacity = None, animate_size = None, animate_position = None, animate_rotation = None, animate_scale = None, animate_offset = None, on_animation_end = None, tooltip = None, badge = None, visible = None, disabled = None, data = None, adaptive = None):
-        super().__init__(text, icon, icon_color, content, style, autofocus, url, url_target, clip_behavior, on_click, on_long_press, on_hover, on_focus, on_blur, ref, key, width, height, left, top, right, bottom, expand, expand_loose, col, opacity, rotate, scale, offset, aspect_ratio, animate_opacity, animate_size, animate_position, animate_rotation, animate_scale, animate_offset, on_animation_end, tooltip, badge, visible, disabled, data, adaptive)
+def TextButton(text, on_click=None):
+    return ft.TextButton(
+        content=text,
+        on_click=on_click,
+        width=144,
+        height=48,
+        style=ft.ButtonStyle(text_style=ft.TextStyle(size=16), side=ft.BorderSide(1, ft.Colors.OUTLINE)),
+    )
 
 class HomeView(View):
     def __init__(self, page: ft.Page, db, redis):
         super().__init__(page, db, redis)
         self.route = '/'
-        user = page.session.get('user')
+        user = page.session.store.get('user')
         events = sorted(
             self.db.getAllEvents(),
             key=lambda event: (event.date, event.name.casefold()),
@@ -25,7 +30,7 @@ class HomeView(View):
         event_picker = ft.Dropdown(
             label="Event auswählen",
             options=[
-                ft.dropdown.Option(key=str(event.id), text=event.descr())
+                ft.DropdownOption(key=str(event.id), text=event.descr())
                 for event in events
             ],
             value=str(events[0].id) if events else None,
@@ -62,20 +67,20 @@ class HomeView(View):
                 )
                 if progress == Progress.PLANNED:
                     event_details.controls.append(
-                        ft.ElevatedButton(
+                        ft.Button(
                             "Für dieses Event anmelden",
                             icon=ft.Icons.PERSON_ADD_ALT_1,
-                            on_click=lambda _, event_id=event.id: self.page.go(
+                            on_click=lambda _, event_id=event.id: go(self.page, 
                                 f"/anmeldung/{event_id}"
                             ),
                         )
                     )
                 elif progress == Progress.ACTIVE:
                     event_details.controls.append(
-                        ft.ElevatedButton(
+                        ft.Button(
                             "Live-Ergebnisse ansehen",
                             icon=ft.Icons.LIVE_TV,
-                            on_click=lambda _, event_id=event.id: self.page.go(
+                            on_click=lambda _, event_id=event.id: go(self.page, 
                                 f"/public/liveEvent/{event_id}"
                             ),
                         )
@@ -83,15 +88,15 @@ class HomeView(View):
                 else:
                     event_details.controls.extend(
                         [
-                            ft.ElevatedButton(
+                            ft.Button(
                                 "Ergebnisse (PDF)",
-                                on_click=lambda _, event_id=event.id: self.page.launch_url(
+                                on_click=lambda _, event_id=event.id: open_url(self.page, 
                                     f"https://{View.api()}/results/{event_id}"
                                 ),
                             ),
-                            ft.ElevatedButton(
+                            ft.Button(
                                 "Ergebnisse (XLSX)",
-                                on_click=lambda _, event_id=event.id: self.page.launch_url(
+                                on_click=lambda _, event_id=event.id: open_url(self.page, 
                                     f"https://{View.api()}/results_xlsx/{event_id}"
                                 ),
                             ),
@@ -100,7 +105,7 @@ class HomeView(View):
             if update_page:
                 self.page.update()
 
-        event_picker.on_change = show_selected_event
+        event_picker.on_select = show_selected_event
         show_selected_event(None, update_page=False)
 
         def loginbtn(_):
@@ -109,7 +114,7 @@ class HomeView(View):
                 passEdit.value or "",
             )
             if user_id is None:
-                self.page.open(
+                self.page.show_dialog(
                     ft.SnackBar(
                         ft.Text("Falscher Benutzername oder falsches Passwort."),
                         bgcolor="red",
@@ -117,14 +122,14 @@ class HomeView(View):
                 )
                 return
 
-            self.page.session.set("user", self.db.getUser(user_id))
+            self.page.session.store.set("user", self.db.getUser(user_id))
             self.setToken(secrets.token_urlsafe())
-            if self.page.session.contains_key("target"):
-                target = self.page.session.get("target")
-                self.page.session.remove("target")
-                self.page.go(target)
+            if self.page.session.store.contains_key("target"):
+                target = self.page.session.store.get("target")
+                self.page.session.store.remove("target")
+                go(self.page, target)
             else:
-                self.page.go("/")
+                go(self.page, "/")
 
         userEdit = ft.TextField(label="Benutzername", width=320)
         passEdit = ft.TextField(
@@ -154,16 +159,16 @@ class HomeView(View):
                             ft.Text(
                                 "Suche Wettkampffotos über deine Startnummer."
                             ),
-                            ft.ElevatedButton(
+                            ft.Button(
                                 "Zum Bilderbereich",
                                 icon=ft.Icons.ARROW_FORWARD,
-                                on_click=lambda _: self.page.go("/bilder"),
+                                on_click=lambda _: go(self.page, "/bilder"),
                             ),
                         ],
                         spacing=10,
                     ),
                     padding=18,
-                    border=ft.border.all(1, ft.Colors.OUTLINE),
+                    border=ft.Border.all(1, ft.Colors.OUTLINE),
                     border_radius=12,
                 ),
             ],
@@ -179,7 +184,7 @@ class HomeView(View):
                     ft.Text("Melde dich beim Jurysystem an."),
                     userEdit,
                     passEdit,
-                    ft.ElevatedButton(
+                    ft.Button(
                         "Login",
                         icon=ft.Icons.LOGIN,
                         width=320,
@@ -196,14 +201,14 @@ class HomeView(View):
                     ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=48),
                     ft.Text("Angemeldet", size=26, weight=ft.FontWeight.BOLD),
                     ft.Text(f"Hallo, {user.username}"),
-                    ft.ElevatedButton("Logout", on_click=self.logout),
+                    ft.Button("Logout", on_click=self.logout),
                     ft.Divider(),
                     ft.Text("Verwaltung", size=20, weight=ft.FontWeight.BOLD),
                     ft.Row(
                         controls=[
                             TextButton(
                                 self.tr.tr(allowed.name),
-                                on_click=lambda _, route=allowed.route: self.page.go(route),
+                                on_click=lambda _, route=allowed.route: go(self.page, route),
                             )
                             for allowed in allowedRoutes(user)
                         ],
@@ -228,7 +233,7 @@ class HomeView(View):
         )
         card_style = {
             "padding": 24,
-            "border": ft.border.all(1, ft.Colors.OUTLINE),
+            "border": ft.Border.all(1, ft.Colors.OUTLINE),
             "border_radius": 16,
             "bgcolor": ft.Colors.SURFACE_CONTAINER_HIGHEST,
         }
@@ -253,7 +258,7 @@ class HomeView(View):
                         ft.Container(
                             content=center_panel,
                             col={"xs": 12, "md": 4},
-                            alignment=ft.alignment.center,
+                            alignment=ft.Alignment.CENTER,
                             **card_style,
                         ),
                     ],
@@ -268,39 +273,38 @@ class HomeView(View):
         ]
 
     def logout(self, e):
-        self.page.session.clear()
-        self.page.go('/')
+        self.page.session.store.clear()
+        go(self.page, '/')
 
 
 class LoginView(View):
     def __init__(self, page: ft.Page, db, redis):
         super().__init__(page, db, redis)
         self.route = '/login'
-        self.scroll = False
+        self.scroll = None
 
         def loginbtn(e):
             userId = self.db.validateUser(userEdit.value, passEdit.value)
             if userId is not None:
                 print("Redirecting...")
-                self.page.session.set('user', self.db.getUser(userId))
+                self.page.session.store.set('user', self.db.getUser(userId))
                 self.setToken(secrets.token_urlsafe())
-                if self.page.session.contains_key('target'):
-                    target = self.page.session.get('target')
-                    self.page.session.remove('target')
-                    self.page.route = target
-                    self.page.on_route_change(ft.RouteChangeEvent(target))
+                if self.page.session.store.contains_key('target'):
+                    target = self.page.session.store.get('target')
+                    self.page.session.store.remove('target')
+                    go(self.page, target)
                 else:
-                    self.page.go('/')
+                    go(self.page, '/')
             else:
                 print("Login failed !!!")
-                self.page.open(ft.SnackBar(
+                self.page.show_dialog(ft.SnackBar(
                     ft.Text("wrong login, user expired or locked", size=30),
                     bgcolor="red"
                 ))
 
         userEdit = ft.TextField(label="User name", width=400, border_color= "white")
         passEdit = ft.TextField(label="Password", password=True, border_color= "white", can_reveal_password=True, on_submit=loginbtn, width=400)
-        login_button = ft.ElevatedButton(
+        login_button = ft.Button(
             "Login",
             on_click=loginbtn,
             color="black", 
@@ -331,6 +335,6 @@ class LoginView(View):
                     scroll=ft.ScrollMode.AUTO
                 ),
                 expand=True,
-                alignment=ft.alignment.center
+                alignment=ft.Alignment.CENTER
             )
         ]

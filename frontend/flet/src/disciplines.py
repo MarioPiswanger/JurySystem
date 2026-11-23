@@ -1,7 +1,7 @@
 import os
 import sys
 import flet as ft
-from view import View
+from view import View, go, open_url
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from shared.database import EventDiscipline
@@ -59,5 +59,5 @@ class DisciplinesView(View):
             ft.AppBar(title=ft.Text(f"Disciplines for {self.event.name}"), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             ft.Row([self.name_input, ft.IconButton(icon=ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.BLUE_300, on_click=addDiscipline)]),
             ft.Row([self.table], scroll=ft.ScrollMode.AUTO),
-            ft.ElevatedButton("Back", on_click=lambda _: self.page.go("/events"))
+            ft.Button("Back", on_click=lambda _: go(self.page, "/events"))
         ]

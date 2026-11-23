@@ -1,7 +1,7 @@
 import os
 import sys
 import flet as ft
-from view import View
+from view import View, go, open_url
 from datetime import datetime
 from translate import tr
 
@@ -19,19 +19,19 @@ class RatingSelectEventView(View):
     def __init__(self, page: ft.Page, db, redis):
         super().__init__(page, db, redis)
         self.route = '/rating'
-        self.scroll = False
+        self.scroll = None
 
         buttons = [
-            ft.ElevatedButton(
+            ft.Button(
                 f"{e.descr()}",
-                on_click=lambda _, id=e.id: self.page.go(f'/rating/{id}'),
+                on_click=lambda _, id=e.id: go(self.page, f'/rating/{id}'),
                 width=300
             ) for e in self.db.getAllEvents()
         ]
-        buttons.append(ft.ElevatedButton("Home", on_click=lambda _: self.page.go("/")))
+        buttons.append(ft.Button("Home", on_click=lambda _: go(self.page, "/")))
 
         self.controls = [
-            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr("Help"), on_click=lambda _: self.page.go('/help')), title=ft.Text('Select Event'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
+            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr("Help"), on_click=lambda _: go(self.page, '/help')), title=ft.Text('Select Event'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             ft.Container(
                 content=ft.Column(
                     controls=buttons,
@@ -41,7 +41,7 @@ class RatingSelectEventView(View):
                     alignment=ft.MainAxisAlignment.CENTER
                 ),
                 expand=True,
-                alignment=ft.alignment.center
+                alignment=ft.Alignment.CENTER
             )
         ]
 
@@ -51,7 +51,7 @@ class RatingView(View):
         self.route = f'/rating/{eventId}'
         self.scroll = ft.ScrollMode.AUTO
 
-        self.user = self.page.session.get('user')
+        self.user = self.page.session.store.get('user')
         self.tr = tr(self.user.language)
         self.event = self.db.getEvent(eventId)
         self.disciplines = self.db.getEventDisciplines(eventId)
@@ -73,15 +73,15 @@ class RatingView(View):
         self.disciplineEdit = ft.Dropdown(
             label=self.tr.tr("Discipline"),
             width = 300,
-            options=[ft.dropdownm2.Option(d.name) for d in self.disciplines],
-            on_change=updateAthletes
+            options=[ft.DropdownOption(d.name) for d in self.disciplines],
+            on_select=updateAthletes
         )
         self.groupEdit = ft.Dropdown(
             label=self.tr.tr("Group"),
             width = 300,
-            options=[ft.dropdownm2.Option(g) for g in self.groups],
+            options=[ft.DropdownOption(g) for g in self.groups],
             disabled=True,
-            on_change=updateAthletes
+            on_select=updateAthletes
         )
         self.updateControls()
 
@@ -172,7 +172,7 @@ class RatingView(View):
 
             def digit_btn(text, handler):
                 return ft.OutlinedButton(
-                    text=text,
+                    content=text,
                     on_click=handler,
                     expand=1,
                     height=72,
@@ -207,7 +207,7 @@ class RatingView(View):
                         [
                             digit_btn(".", lambda _: add_char(".")),
                             digit_btn("0", lambda _: add_char("0")),
-                            ft.ElevatedButton(
+                            ft.Button(
                                 content=ft.Icon(ft.Icons.BACKSPACE_OUTLINED, size=28),
                                 on_click=backspace,
                                 expand=1,
@@ -242,7 +242,7 @@ class RatingView(View):
                 width=self.page.width,
                 height=sheet_height,
                 bgcolor=ft.Colors.SURFACE,
-                border_radius=ft.border_radius.only(top_left=20, top_right=20),
+                border_radius=ft.BorderRadius.only(top_left=20, top_right=20),
                 padding=16,
                 bottom=-sheet_height,
                 animate_position=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
@@ -289,16 +289,16 @@ class RatingView(View):
                 columns=[ft.DataColumn(ft.Text(h)) for h in ['name', 'cat', selected_discipline or self.tr.tr('Discipline'), '']],
                 rows= [self.AthleteRatingAsRow(athlete, selected_discipline, editRating, i) for i, athlete in enumerate(self.athletes)] if selected_discipline else [],
                 column_spacing=10,
-                vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE)
+                vertical_lines=ft.BorderSide(1, ft.Colors.OUTLINE)
             )
 
         self.controls = [
-            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: self.page.go('/help')), title=ft.Text(f'Rating'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
+            ft.AppBar(leading=ft.IconButton(icon=ft.Icons.HELP_OUTLINE, tooltip=self.tr.tr('Help'), on_click=lambda _: go(self.page, '/help')), title=ft.Text(f'Rating'), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST),
             ft.Column(controls=[
                 ft.Text(self.event.name, size=30, color=ft.Colors.PINK_600, italic=True),
                 ft.Row([self.disciplineEdit, self.groupEdit], wrap=True),
                 ft.Row([self.table], scroll=ft.ScrollMode.AUTO),
-                ft.ElevatedButton("Home", on_click=lambda _: self.page.go("/"))
+                ft.Button("Home", on_click=lambda _: go(self.page, "/"))
             ], scroll=ft.ScrollMode.AUTO, expand=True)
         ]
         self.page.update()
