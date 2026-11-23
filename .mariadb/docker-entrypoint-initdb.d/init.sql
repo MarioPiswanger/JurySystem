@@ -92,10 +92,10 @@ INSERT INTO `event_categories` (`name`, `eventId`, `gender`, `birthFrom`, `birth
   ('Kn02', 1, 0, '2000-01-01', '2099-12-31', 0, ''),
   ('Md01', 1, 1, '1900-01-01', '2099-12-31', 1, '"gold" if sum > goldThres else "silber" if sum > silberThres else "bronze" if sum > bronzeThres else ""'),
   -- Lauf: rankingType 2 = TIME, age split by birth year (50 or older in 2026 = born 1976 or earlier)
-  ('M U50', 3, 0, '1977-01-01', '2099-12-31', 2, ''),
-  ('M Ü50', 3, 0, '1900-01-01', '1976-12-31', 2, ''),
-  ('W U50', 3, 1, '1977-01-01', '2099-12-31', 2, ''),
-  ('W Ü50', 3, 1, '1900-01-01', '1976-12-31', 2, '');
+  ('M unter 50', 3, 0, '1977-01-01', '2099-12-31', 2, ''),
+  ('M über 50', 3, 0, '1900-01-01', '1976-12-31', 2, ''),
+  ('W unter 50', 3, 1, '1977-01-01', '2099-12-31', 2, ''),
+  ('W über 50', 3, 1, '1900-01-01', '1976-12-31', 2, '');
 
 CREATE TABLE IF NOT EXISTS `event_disciplines` (
   `name` varchar(50) NOT NULL,
